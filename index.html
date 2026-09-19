@@ -171,12 +171,19 @@ th{background:#edf2fa;}
                 <div class="row">
                     <button id="unsubmitBtn" onclick="toggleUnsubmittedView()">未上交展示</button>
                 </div>
-                <h4>班级作业列表</h4>
-                <div id="stuHwList"></div>
+                <h4 style="margin-top:8px;">选择作业：</h4>
+                <div class="row">
+                    <select id="stuHwSelect" style="padding:9px 12px;border-radius:6px;border:1px solid #bbb;font-size:14px;min-width:280px;" onchange="onStuHwChange()">
+                        <option value="">-- 请选择作业 --</option>
+                    </select>
+                </div>
             </div>
         </div>
         <div class="card">
             <h4>作业信息统计（可投影大屏）</h4>
+            <div class="row no-print">
+                <input id="stuSearchInput" placeholder="搜索学生姓名/条码..." style="padding:8px;border:1px solid #bbb;border-radius:6px;width:260px;" oninput="studentRenderDisplay()">
+            </div>
             <div class="stat-bar" id="statBarStudent"></div>
             <div id="displayArea"></div>
         </div>
@@ -187,17 +194,26 @@ th{background:#edf2fa;}
     <div class="container">
         <div class="header-bar no-print">
             <h2>作业收交批改系统 — 教师端</h2>
-            <div style="display:flex;gap:12px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <span id="teaClassTitle"></span>
+                <button class="warn" onclick="changeMyClassName()">改班名</button>
+                <button class="danger" onclick="deleteMyClass()">删除本班</button>
                 <button class="danger" onclick="logout()">退出</button>
             </div>
         </div>
         <div class="card no-print">
-            <h4>1、导入班级学生【条码编号、学生姓名】(仅初始化使用)</h4>
+            <h4>1、选择当前作业（扫码批改、下方表格都针对这份作业）</h4>
+            <div class="row">
+                <select id="teaHwSelect" style="padding:9px 12px;border-radius:6px;border:1px solid #bbb;font-size:14px;min-width:260px;" onchange="onTeaHwChange()">
+                    <option value="">-- 请先选择作业 --</option>
+                </select>
+                <input id="teaHwSearch" placeholder="搜索作业名称..." style="padding:9px 12px;border-radius:6px;border:1px solid #bbb;font-size:14px;width:200px;" oninput="filterTeaHwSelect()">
+            </div>
+            <h4>2、导入班级学生【条码编号、学生姓名】(仅初始化使用)</h4>
             <div class="row">
                 <input type="file" id="teaImportStuFile" accept=".xlsx,.xls" onchange="importTeacherStudent()">
             </div>
-            <h4>2、新建作业</h4>
+            <h4>3、新建作业</h4>
             <div class="form-item">
                 <label>作业名称</label>
                 <input id="newHwNameTea" placeholder="输入作业名称">
@@ -205,7 +221,7 @@ th{background:#edf2fa;}
             <div class="row">
                 <button class="success" onclick="createNewHomework()">创建作业</button>
             </div>
-            <h4>3、扫码枪：扫条码回车直接【弹出批改窗口】</h4>
+            <h4>4、扫码枪：扫条码回车直接【弹出批改窗口】（针对上面选中的作业）</h4>
             <div class="row">
                 <label>扫码输入框：</label>
                 <input id="teacherScanInput" class="scan-input" placeholder="扫学生条码，回车直接批改作业" onkeydown="handleTeacherScan(event)">
@@ -217,6 +233,7 @@ th{background:#edf2fa;}
                 <div class="row">
                     <button onclick="toggleFilterUncheck()">只看未批改</button>
                     <button class="success" onclick="printOverview()">🖨打印总览</button>
+                    <input id="teaSearchInput" placeholder="搜索学生姓名/条码..." style="padding:8px;border:1px solid #bbb;border-radius:6px;width:260px;" oninput="teacherLoadData()">
                 </div>
             </div>
             <div class="print-title" id="printTitle"></div>
@@ -316,18 +333,35 @@ async function renderAdminList(){
     <th>学生密码</th>
     <th>教师账号</th>
     <th>教师密码</th>
+    <th>操作</th>
     </tr>`;
     for(let cd of codeList){
         let cls=clsList.find(x=>x.reg_code===cd.code);
-        html+=`<tr>
-        <td>${cd.code}</td>
-        <td>${cd.used?"已使用":"未使用"}</td>
-        <td>${cls?cls.class_name:"-"}</td>
-        <td>${cls?cls.stu_login:"-"}</td>
-        <td>${cls?cls.stu_pwd:"-"}</td>
-        <td>${cls?cls.tea_login:"-"}</td>
-        <td>${cls?cls.tea_pwd:"-"}</td>
-        </tr>`;
+        if(cls){
+            const safeName=cls.class_name.replace(/'/g,"\\'");
+            html+=`<tr>
+            <td>${cd.code}</td>
+            <td>${cd.used?"已使用":"未使用"}</td>
+            <td>${cls.class_name}</td>
+            <td>${cls.stu_login}</td>
+            <td>${cls.stu_pwd}</td>
+            <td>${cls.tea_login}</td>
+            <td>${cls.tea_pwd}</td>
+            <td style="min-width:260px;">
+                <button class="warn" onclick="adminRenameClass(${cls.id},'${safeName}')">改班名</button>
+                <button class="warn" onclick="adminChangePwd(${cls.id},'stu')">改学生密码</button>
+                <button class="warn" onclick="adminChangePwd(${cls.id},'tea')">改教师密码</button>
+                <button class="danger" onclick="adminDeleteClass(${cls.id},'${safeName}')">删班级</button>
+            </td>
+            </tr>`;
+        }else{
+            html+=`<tr>
+            <td>${cd.code}</td>
+            <td>${cd.used?"已使用":"未使用"}</td>
+            <td colspan="5" style="color:#999;">未注册</td>
+            <td><button class="danger" onclick="adminDeleteCode('${cd.code}')">删验证码</button></td>
+            </tr>`;
+        }
     }
     html+="</table>";
     dom.innerHTML=html;
@@ -429,11 +463,9 @@ async function handleScanGunKey(evt){
     const scanSid=inputDom.value.trim();
     inputDom.value="";inputDom.focus();
     if(!scanSid||!currentLoginInfo.classId) return;
+    if(!activeHwId){alert("请先在上方点击选择一份作业！");return;}
     const {data:stu}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId).eq("sid",scanSid).single();
     if(!stu){alert(`没有找到条码编号：${scanSid}`);return;}
-    const {data:hwList}=await sbClient.from("homework").select("id").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false}).limit(1);
-    if(!hwList||hwList.length===0){alert("请老师先新建作业！");return;}
-    activeHwId=hwList[0].id;
     const {data:sub}=await sbClient.from("hw_submit").select("id").eq("hw_id",activeHwId).eq("student_id",stu.id).single();
     if(sub){
         await sbClient.from("hw_submit").update({submit_status:"已提交",submit_at:new Date()}).eq("id",sub.id);
@@ -443,17 +475,35 @@ async function handleScanGunKey(evt){
     await studentLoadData();
 }
 async function studentLoadData(){
-    const {data:hwList}=await sbClient.from("homework").select("id,hw_name,create_at").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false});
-    if(hwList&&hwList.length>0) activeHwId=hwList[0].id;
-    const domHw=document.getElementById("stuHwList");
-    let hwHtml="";
-    if(!hwList||hwList.length===0){hwHtml="<p>暂无作业，请老师新建作业</p>";}else{
-        hwList.forEach(hw=>{
-            hwHtml+=`<button onclick="activeHwId=${hw.id};studentLoadData()">${hw.hw_name}</button>`;
-        })
+    if(!currentLoginInfo||!currentLoginInfo.classId){
+        alert("登录信息异常，请重新登录");
+        return;
     }
-    domHw.innerHTML=hwHtml;
+    const {data:hwList, error}=await sbClient.from("homework").select("id,hw_name,create_at").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false});
+    if(error){alert("加载作业列表失败："+error.message);return;}
+    if(hwList&&hwList.length>0){
+        if(!activeHwId || !hwList.find(h=>h.id===activeHwId)){
+            activeHwId=hwList[0].id;
+        }
+    }else{
+        activeHwId=null;
+    }
+    const sel=document.getElementById("stuHwSelect");
+    let selHtml="<option value=''>-- 请选择作业 --</option>";
+    if(hwList&&hwList.length>0){
+        hwList.forEach(hw=>{
+            const selected=(activeHwId===hw.id)?"selected":"";
+            selHtml+=`<option value="${hw.id}" ${selected}>${hw.hw_name}</option>`;
+        });
+    }else{
+        selHtml="<option value=''>-- 本班暂无作业，请教师新建 --</option>";
+    }
+    sel.innerHTML=selHtml;
     studentRenderDisplay();
+}
+function onStuHwChange(){
+    const v=document.getElementById("stuHwSelect").value;
+    if(v){activeHwId=parseInt(v);studentRenderDisplay();}
 }
 async function studentRenderDisplay(){
     const {data:stuAll}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId);
@@ -499,7 +549,9 @@ async function studentRenderDisplay(){
         <div class="stat-box stat-red"><div class="stat-num">${g5}</div><div class="stat-label">待及格</div></div>
     </div>`;
     document.getElementById("statBarStudent").innerHTML=statHtml;
+    const kw=(document.getElementById("stuSearchInput")?.value||"").trim().toLowerCase();
     if(showOnlyUnsubmitted) arr=arr.filter(r=>r.submit_status!=="已提交");
+    if(kw) arr=arr.filter(r=>r.sname.toLowerCase().includes(kw)||r.sid.toLowerCase().includes(kw));
     let tableHtml=`<table><tr><th>条码编号</th><th>姓名</th><th>上交状态</th><th>作业等级</th><th>是否退回</th></tr>`;
     arr.forEach(r=>{
         tableHtml+=`<tr><td>${r.sid}</td><td>${r.sname}</td><td>${r.submit_status}</td><td>${r.grade}</td><td>${r.is_return}</td></tr>`;
@@ -532,6 +584,7 @@ async function createNewHomework(){
     await sbClient.from("homework").insert([{class_id:currentLoginInfo.classId,hw_name:hwName}]);
     document.getElementById("newHwNameTea").value="";
     alert("作业创建成功！");
+    activeHwId=null; // 重置，让下次加载默认选到刚建的新作业
     await teacherLoadData();
 }
 async function handleTeacherScan(evt){
@@ -541,17 +594,12 @@ async function handleTeacherScan(evt){
     inputDom.value="";
     inputDom.focus();
     if(!scanSid||!currentLoginInfo.classId) return;
+    if(!activeHwId){alert("请先在上方下拉框选择要批改的作业！");return;}
     const {data:stu}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId).eq("sid",scanSid).single();
     if(!stu){
         alert(`没有找到条码编号：${scanSid}`);
         return;
     }
-    const {data:hwList}=await sbClient.from("homework").select("id").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false}).limit(1);
-    if(!hwList||hwList.length===0){
-        alert("请先新建作业！");
-        return;
-    }
-    activeHwId=hwList[0].id;
     let {data:sub}=await sbClient.from("hw_submit").select("*").eq("hw_id",activeHwId).eq("student_id",stu.id).single();
     if(!sub){
         const insertRes=await sbClient.from("hw_submit").insert([{
@@ -571,11 +619,40 @@ async function handleTeacherScan(evt){
     document.getElementById("editReturn").checked=(sub.is_return==="是");
     openModal("editModal");
 }
+function onTeaHwChange(){
+    const v=document.getElementById("teaHwSelect").value;
+    if(v){activeHwId=parseInt(v);teacherLoadData();}
+}
+function filterTeaHwSelect(){
+    const kw=(document.getElementById("teaHwSearch").value||"").trim().toLowerCase();
+    const sel=document.getElementById("teaHwSelect");
+    Array.from(sel.options).forEach(opt=>{
+        if(opt.value===""){opt.hidden=false;return;}
+        opt.hidden = kw ? !opt.text.toLowerCase().includes(kw) : false;
+    });
+}
 function toggleFilterUncheck(){filterUnCheck=!filterUnCheck;teacherLoadData();}
 function printOverview(){window.print();}
 async function teacherLoadData(){
     const {data:hwList}=await sbClient.from("homework").select("id,hw_name,create_at").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false});
-    if(hwList&&hwList.length>0) activeHwId=hwList[0].id;
+    // 填充作业下拉框
+    const sel=document.getElementById("teaHwSelect");
+    let selHtml="<option value=''>-- 请选择作业 --</option>";
+    if(hwList&&hwList.length>0){
+        // 只有未选或所选作业已不存在时，默认选最新
+        if(!activeHwId || !hwList.find(h=>h.id===activeHwId)){
+            activeHwId=hwList[0].id;
+        }
+        hwList.forEach(hw=>{
+            const selected=(activeHwId===hw.id)?"selected":"";
+            selHtml+=`<option value="${hw.id}" ${selected}>${hw.hw_name}</option>`;
+        });
+    }
+    sel.innerHTML=selHtml;
+    // 打印标题显示当前作业
+    const curHw=hwList?hwList.find(h=>h.id===activeHwId):null;
+    document.getElementById("printTitle").innerText=(curHw?curHw.hw_name:"")+" — 作业提交总览";
+
     const {data:stuAll}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId);
     if(!stuAll||stuAll.length===0){
         document.getElementById("teacherOverview").innerHTML="<p>暂无学生，请导入学生名单</p>";
@@ -583,7 +660,8 @@ async function teacherLoadData(){
         return;
     }
     if(!activeHwId){
-        document.getElementById("teacherOverview").innerHTML="<p>请新建作业</p>";
+        document.getElementById("teacherOverview").innerHTML="<p>请先在上方选择或新建一份作业</p>";
+        document.getElementById("statBarTeacher").innerHTML="";
         return;
     }
     const {data:subAll}=await sbClient.from("hw_submit").select("*,class_student(sid,sname)").eq("hw_id",activeHwId);
@@ -620,7 +698,9 @@ async function teacherLoadData(){
         <div class="stat-box stat-red"><div class="stat-num">${g5}</div><div class="stat-label">待及格</div></div>
     </div>`;
     document.getElementById("statBarTeacher").innerHTML=statHtml;
+    const kw=(document.getElementById("teaSearchInput")?.value||"").trim().toLowerCase();
     if(filterUnCheck) arr=arr.filter(r=>r.grade==="未批改");
+    if(kw) arr=arr.filter(r=>r.sname.toLowerCase().includes(kw)||r.sid.toLowerCase().includes(kw));
     let tableHtml=`<table><tr><th>条码编号</th><th>姓名</th><th>上交状态</th><th>作业等级</th><th>是否退回</th><th>操作</th></tr>`;
     arr.forEach(r=>{
         tableHtml+=`<tr>
@@ -651,6 +731,71 @@ async function saveHwEdit(){
     await sbClient.from("hw_submit").update({grade:gr,is_return:ret}).eq("id",currentEditSubmitId);
     closeModal("editModal");
     await teacherLoadData();
+}
+
+//====教师端：改班名 / 删除本班====
+async function changeMyClassName(){
+    const newName=prompt("请输入新的班级名称：", currentLoginInfo.className||"");
+    if(!newName||!newName.trim()) return;
+    const {error}=await sbClient.from("class_info").update({class_name:newName.trim()}).eq("id",currentLoginInfo.classId);
+    if(error){alert(error.message);return;}
+    currentLoginInfo.className=newName.trim();
+    document.getElementById("teaClassTitle").innerText="班级："+newName.trim();
+    alert("班级名称已修改");
+}
+async function deleteMyClass(){
+    if(!confirm("确定要删除本班吗？所有学生名单、作业、成绩都会被永久删除，不可恢复！")) return;
+    if(!confirm("再次确认：真的要删除本班？点确定继续，点取消保留")) return;
+    const classId=currentLoginInfo.classId;
+    const {data:hws}=await sbClient.from("homework").select("id").eq("class_id",classId);
+    if(hws&&hws.length>0){
+        const hwIds=hws.map(h=>h.id);
+        await sbClient.from("hw_submit").delete().in("hw_id",hwIds);
+        await sbClient.from("homework").delete().eq("class_id",classId);
+    }
+    await sbClient.from("class_student").delete().eq("class_id",classId);
+    await sbClient.from("class_info").delete().eq("id",classId);
+    alert("本班已删除，即将退出登录");
+    logout();
+}
+
+//====管理员端：改班名 / 改密码 / 删班级 / 删未用验证码====
+async function adminRenameClass(classId, oldName){
+    const newName=prompt("请输入新的班级名称：", oldName);
+    if(!newName||!newName.trim()) return;
+    const {error}=await sbClient.from("class_info").update({class_name:newName.trim()}).eq("id",classId);
+    if(error){alert(error.message);return;}
+    alert("班级名已修改");
+    await renderAdminList();
+}
+async function adminChangePwd(classId, type){
+    const label = type==='stu' ? "学生" : "教师";
+    const newPwd=prompt("请输入新的"+label+"密码：");
+    if(!newPwd||!newPwd.trim()) return;
+    const field = type==='stu' ? "stu_pwd" : "tea_pwd";
+    const {error}=await sbClient.from("class_info").update({[field]:newPwd.trim()}).eq("id",classId);
+    if(error){alert(error.message);return;}
+    alert(label+"密码已修改");
+    await renderAdminList();
+}
+async function adminDeleteClass(classId, className){
+    if(!confirm("确定要删除班级「"+className+"」吗？所有学生、作业、成绩都会被永久删除！")) return;
+    if(!confirm("再次确认删除，此操作不可恢复！")) return;
+    const {data:hws}=await sbClient.from("homework").select("id").eq("class_id",classId);
+    if(hws&&hws.length>0){
+        const hwIds=hws.map(h=>h.id);
+        await sbClient.from("hw_submit").delete().in("hw_id",hwIds);
+        await sbClient.from("homework").delete().eq("class_id",classId);
+    }
+    await sbClient.from("class_student").delete().eq("class_id",classId);
+    await sbClient.from("class_info").delete().eq("id",classId);
+    alert("班级已删除");
+    await renderAdminList();
+}
+async function adminDeleteCode(code){
+    if(!confirm("确定要删除这个未使用的验证码 "+code+" 吗？")) return;
+    await sbClient.from("reg_code").delete().eq("code",code);
+    await renderAdminList();
 }
 
 //页面加载完成后初始化

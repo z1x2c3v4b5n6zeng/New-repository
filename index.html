@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh‑CN">
+<head>
+<meta charset="UTF‑8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;margin:0;padding:0;}
+body{background:#f4f7fa;padding:16px;}
+.container{max-width:1200px;margin:0 auto;}
+.card{background:#fff;padding:18px;border-radius:8px;box-shadow:0 2px 6px #0001;margin:12px 0;}
+button{padding:9px 14px;border:0;border-radius:6px;background:#2374d1;color:#fff;cursor:pointer;font-size:14px;margin:3px;}
+button.success{background:#28a950;}
+button.danger{background:#c53030;}
+button.warn{background:#e68924;}
+button.active{background:#1a5fb4;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;}
+table{width:100%;border-collapse:collapse;margin:10px 0;}
+th,td{border:1px solid #ccc;padding:8px;text-align:center;}
+th{background:#edf2fa;}
+.hidden{display:none !important;}
+.modal{position:fixed;top:10%;left:50%;transform:translateX(-50%);width:540px;background:#fff;z-index:99;padding:20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+.tip-info{color:#2374d1;font-weight:bold;}
+.stat-bar{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
+.stat-row{display:flex;gap:12px;flex-wrap:wrap;}
+.stat-box{flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center;}
+.stat-num{font-size:28px;font-weight:bold;line-height:1.2;}
+.stat-label{font-size:13px;color:#64748b;margin-top:2px;}
+.stat-green .stat-num{color:#16a34a;}
+.stat-red .stat-num{color:#dc2626;}
+.stat-blue .stat-num{color:#2563eb;}
+.stat-gray .stat-num{color:#334155;}
+.topcard-header{display:flex;justify-content:space-between;align-items:center;}
+.triangle-top-btn{
+    background:none;
+    border:none;
+    font-size:22px;
+    cursor:pointer;
+    color:#444;
+    padding:2px 8px;
+    margin:0;
+}
+.top-wrap{
+    overflow:hidden;
+    min-height:8px;
+    transition: max-height 0.35s ease;
+}
+.top-wrap.expanded{
+    max-height:1200px;
+}
+.top-wrap.collapsed{
+    max-height:8px !important;
+}
+@media print{
+    body{background:#fff;padding:0;}
+    .no-print{display:none !important;}
+    .card{box-shadow:none;border:none;padding:0;margin:0;}
+    .table-wrap{max-height:none;overflow:visible;border:none;}
+    .stat-box{border:1px solid #ccc;background:#fff;}
+    .print-title{display:block !important;text-align:center;margin-bottom:6px;font-size:20px;}
+}
+.print-title{display:none;}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-card{width:420px;background:#fff;padding:24px;border-radius:10px;box-shadow:0 2px 14px #00000022;}
+.login-card h2{text-align:center;margin-bottom:20px;}
+.form-item{margin:12px 0;}
+.form-item label{display:block;margin-bottom:4px;}
+.form-item input{width:100%;padding:10px;border:1px solid #bbb;border-radius:6px;font-size:14px;}
+.bottom-right{text-align:right;margin-top:16px;}
+.header-bar{display:flex;justify-content:space-between;align-items:center;}
+.admin-page{max-width:1100px;margin:0 auto;}
+.scan-input{width:520px;height:52px;font-size:18px;border:2px solid #2374d1;}
+</style>
+</head>
+<body>
+<div id="pageLogin" class="login-wrap">
+    <div class="login-card">
+        <h2>作业收交批改系统</h2>
+        <div class="form-item">
+            <label>用户名</label>
+            <input id="loginUser" type="text" placeholder="普通用户/管理员">
+        </div>
+        <div class="form-item">
+            <label>密码</label>
+            <input id="loginPwd" type="password" placeholder="请输入密码">
+        </div>
+        <div class="row" style="margin-top:20px;">
+            <button style="flex:1;" onclick="doLogin()">登录</button>
+        </div>
+        <div class="bottom-right">
+            <button class="warn" onclick="openRegisterModal()">新班级注册</button>
+        </div>
+    </div>
+</div>
+<div id="pageAdmin" class="hidden">
+    <div class="container admin-page">
+        <div class="card">
+            <div class="row" style="justify-content:space-between;">
+                <h2>管理员后台</h2>
+                <button class="danger" onclick="logout()">退出登录</button>
+            </div>
+            <div class="form-item">
+                <label>生成新注册验证码（6位数字）</label>
+                <input id="newCodeInput" type="text" placeholder="输入6位数字验证码">
+            </div>
+            <div class="row">
+                <button class="success" onclick="addNewRegCode()">添加验证码，可供班级注册</button>
+            </div>
+            <h3 style="margin-top:20px;">验证码&班级账号密码总览（管理员可见全部账号密码）</h3>
+            <div id="adminClassList"></div>
+        </div>
+    </div>
+</div>
+<div id="modalRegister" class="modal hidden">
+    <h3>新班级注册</h3>
+    <div id="regStep1">
+        <div class="form-item">
+            <label>注册验证码（向管理员获取）</label>
+            <input id="regCode" type="text" placeholder="输入6位验证码">
+        </div>
+        <div class="row">
+            <button class="success" onclick="checkRegCode()">确认验证码</button>
+            <button class="danger" onclick="closeRegisterModal()">关闭</button>
+        </div>
+    </div>
+    <div id="regStep2" class="hidden">
+        <div class="form-item">
+            <label>新班级昵称</label>
+            <input id="regClassName" type="text" placeholder="例如：初一(1)班">
+        </div>
+        <div class="form-item">
+            <label>学生端‑登录账号</label>
+            <input id="regStuUser" type="text" placeholder="学生登录用户名">
+        </div>
+        <div class="form-item">
+            <label>学生端‑登录密码</label>
+            <input id="regStuPwd" type="password" placeholder="学生登录密码">
+        </div>
+        <div class="form-item">
+            <label>教师端‑登录账号</label>
+            <input id="regTeaUser" type="text" placeholder="教师登录用户名">
+        </div>
+        <div class="form-item">
+            <label>教师端‑登录密码</label>
+            <input id="regTeaPwd" type="password" placeholder="教师登录密码">
+        </div>
+        <div class="row">
+            <button class="success" onclick="submitRegister()">提交注册</button>
+            <button class="danger" onclick="closeRegisterModal()">关闭</button>
+        </div>
+    </div>
+</div>
+<!--学生端：完整保留扫码枪，上交直接存云端 -->
+<div id="pageStudent" class="hidden">
+    <div class="container">
+        <div class="topcard-header">
+            <h2>作业收交批改系统 — 学生端</h2>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span id="stuClassTitle"></span>
+                <button class="triangle-top-btn" id="topTriBtn" onclick="toggleTopCollapse()">▼</button>
+                <button class="danger no-print" onclick="logout()">退出</button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="top-wrap expanded" id="topWrap">
+                <div class="row tip-info">
+                    <label>扫码枪输入框（光标放这里，直接扫条码）：</label>
+                    <input id="scanGunInput" class="scan-input" placeholder="扫码枪扫描学号，回车标记已交" onkeydown="handleScanGunKey(event)">
+                </div>
+                <div class="row">
+                    <button id="unsubmitBtn" onclick="toggleUnsubmittedView()">未上交展示</button>
+                </div>
+                <h4>班级作业列表</h4>
+                <div id="stuHwList"></div>
+            </div>
+        </div>
+        <div class="card">
+            <h4>作业信息统计（可投影大屏）</h4>
+            <div class="stat-bar" id="statBarStudent"></div>
+            <div id="displayArea"></div>
+        </div>
+    </div>
+</div>
+<!--教师端：扫码回车直接弹出批改弹窗，不用翻表格 -->
+<div id="pageTeacher" class="hidden">
+    <div class="container">
+        <div class="header-bar no-print">
+            <h2>作业收交批改系统 — 教师端</h2>
+            <div style="display:flex;gap:12px;align-items:center;">
+                <span id="teaClassTitle"></span>
+                <button class="danger" onclick="logout()">退出</button>
+            </div>
+        </div>
+        <div class="card no-print">
+            <h4>1、导入班级学生【条码编号、学生姓名】(仅初始化使用)</h4>
+            <div class="row">
+                <input type="file" id="teaImportStuFile" accept=".xlsx,.xls" onchange="importTeacherStudent()">
+            </div>
+            <h4>2、新建作业</h4>
+            <div class="form-item">
+                <label>作业名称</label>
+                <input id="newHwNameTea" placeholder="输入作业名称">
+            </div>
+            <div class="row">
+                <button class="success" onclick="createNewHomework()">创建作业</button>
+            </div>
+            <h4>3、扫码枪：扫条码回车直接【弹出批改窗口】</h4>
+            <div class="row">
+                <label>扫码输入框：</label>
+                <input id="teacherScanInput" class="scan-input" placeholder="扫学生条码，回车直接批改作业" onkeydown="handleTeacherScan(event)">
+            </div>
+        </div>
+        <div class="card">
+            <div class="no-print">
+                <h4>班级作业提交总览（可筛选未批改）</h4>
+                <div class="row">
+                    <button onclick="toggleFilterUncheck()">只看未批改</button>
+                    <button class="success" onclick="printOverview()">🖨打印总览</button>
+                </div>
+            </div>
+            <div class="print-title" id="printTitle"></div>
+            <div class="stat-bar" id="statBarTeacher"></div>
+            <div class="table-wrap">
+                <div id="teacherOverview"></div>
+            </div>
+        </div>
+    </div>
+    <div id="editModal" class="modal hidden">
+        <h3>批改作业</h3>
+        <div class="form-item"><label>学生条码：<span id="editSid"></span></label></div>
+        <div class="form-item"><label>学生：<span id="editStuName"></span></label></div>
+        <div class="form-item"><label>上交状态：<span id="editSubmitStatus"></span></label></div>
+        <div class="form-item">
+            <label>评定等级：</label>
+            <select id="editGrade">
+                <option value="未批改">未批改</option>
+                <option value="优+">优+</option>
+                <option value="优">优</option>
+                <option value="良">良</option>
+                <option value="及格">及格</option>
+                <option value="待及格">待及格</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label>是否退回</label>
+            <input type="checkbox" id="editReturn">
+        </div>
+        <div class="row">
+            <button class="success" onclick="saveHwEdit()">保存批改</button>
+            <button class="danger" onclick="closeModal('editModal')">关闭</button>
+        </div>
+    </div>
+</div>
+<script>
+// ===================== 【替换为你的Supabase信息】 =====================
+const SUPABASE_URL = "https://qaatcohuwwwxvwuzchqv.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhYXRjb2h1d3d3eHZ3dXpjaHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTIyMzIsImV4cCI6MjEwNDc4ODIzMn0.y6xmhIMqLM-hInVqJunInFXRFpmQUy9PFwkS3wRiBqU";
+let sbClient = null;
+
+// 安全初始化
+async function initSupabase(){
+  if(!window.supabase){
+    alert("Supabase JS加载失败！请检查网络");
+    return false;
+  }
+  const { createClient } = window.supabase;
+  sbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  console.log("✅ 数据库连接初始化完成");
+  return true;
+}
+
+let currentLoginInfo = { role:null, classId:null, className:null };
+let filterUnCheck = false;
+let currentEditSubmitId = null;
+let topIsCollapsed = false;
+let showOnlyUnsubmitted = false;
+let activeHwId = null;
+
+//通用
+function closeModal(id){document.getElementById(id).classList.add("hidden");}
+function openModal(id){document.getElementById(id).classList.remove("hidden");}
+function logout(){
+    currentLoginInfo={role:null,classId:null,className:null};
+    activeHwId=null;
+    document.getElementById("pageLogin").classList.remove("hidden");
+    document.getElementById("pageAdmin").classList.add("hidden");
+    document.getElementById("pageStudent").classList.add("hidden");
+    document.getElementById("pageTeacher").classList.add("hidden");
+    document.getElementById("loginUser").value="";
+    document.getElementById("loginPwd").value="";
+}
+
+//=====管理员后台=====
+async function addNewRegCode(){
+    const c = document.getElementById("newCodeInput").value.trim();
+    if(!c||c.length!==6){alert("必须输入6位验证码");return;}
+    const {error}=await sbClient.from('reg_code').insert([{code:c,used:false}]).select();
+    if(error){alert(error.message);return;}
+    alert("验证码生成成功");
+    document.getElementById("newCodeInput").value="";
+    await renderAdminList();
+}
+
+async function renderAdminList(){
+    const {data:codeList}=await sbClient.from('reg_code').select('*');
+    const {data:clsList}=await sbClient.from('class_info').select('*');
+    const dom=document.getElementById("adminClassList");
+    if(!codeList||codeList.length===0){dom.innerHTML="<p>暂无验证码</p>";return;}
+    let html=`<table>
+    <tr>
+    <th>验证码</th>
+    <th>是否已使用</th>
+    <th>班级昵称</th>
+    <th>学生账号</th>
+    <th>学生密码</th>
+    <th>教师账号</th>
+    <th>教师密码</th>
+    </tr>`;
+    for(let cd of codeList){
+        let cls=clsList.find(x=>x.reg_code===cd.code);
+        html+=`<tr>
+        <td>${cd.code}</td>
+        <td>${cd.used?"已使用":"未使用"}</td>
+        <td>${cls?cls.class_name:"-"}</td>
+        <td>${cls?cls.stu_login:"-"}</td>
+        <td>${cls?cls.stu_pwd:"-"}</td>
+        <td>${cls?cls.tea_login:"-"}</td>
+        <td>${cls?cls.tea_pwd:"-"}</td>
+        </tr>`;
+    }
+    html+="</table>";
+    dom.innerHTML=html;
+}
+
+//注册弹窗
+function openRegisterModal(){
+    document.getElementById("modalRegister").classList.remove("hidden");
+    document.getElementById("regStep1").classList.remove("hidden");
+    document.getElementById("regStep2").classList.add("hidden");
+    document.getElementById("regCode").value="";
+    document.getElementById("regClassName").value="";
+    document.getElementById("regStuUser").value="";
+    document.getElementById("regStuPwd").value="";
+    document.getElementById("regTeaUser").value="";
+    document.getElementById("regTeaPwd").value="";
+}
+function closeRegisterModal(){document.getElementById("modalRegister").classList.add("hidden");}
+async function checkRegCode(){
+    const code=document.getElementById("regCode").value.trim();
+    if(!code||code.length!==6){alert("验证码必须6位");return;}
+    const {data}=await sbClient.from('reg_code').select('*').eq('code',code).single();
+    if(!data||data.used===true){alert("验证码错误或者已被使用");return;}
+    alert("验证码确认成功，请填写班级信息");
+    document.getElementById("regStep1").classList.add("hidden");
+    document.getElementById("regStep2").classList.remove("hidden");
+}
+async function submitRegister(){
+    const code=document.getElementById("regCode").value.trim();
+    const className=document.getElementById("regClassName").value.trim();
+    const stuUser=document.getElementById("regStuUser").value.trim();
+    const stuPwd=document.getElementById("regStuPwd").value.trim();
+    const teaUser=document.getElementById("regTeaUser").value.trim();
+    const teaPwd=document.getElementById("regTeaPwd").value.trim();
+    if(!code||!className||!stuUser||!stuPwd||!teaUser||!teaPwd){alert("全部字段必填");return;}
+    const {err1}=await sbClient.from('class_info').insert([{
+        reg_code:code,class_name:className,
+        stu_login:stuUser,stu_pwd:stuPwd,
+        tea_login:teaUser,tea_pwd:teaPwd
+    }]).select();
+    if(err1){alert(err1.message);return;}
+    await sbClient.from('reg_code').update({used:true}).eq('code',code);
+    alert("班级注册成功，请登录");
+    closeRegisterModal();
+    await renderAdminList();
+}
+
+//登录
+async function doLogin(){
+    const u=document.getElementById("loginUser").value.trim();
+    const p=document.getElementById("loginPwd").value.trim();
+    if(!u||!p){alert("请输入账号密码");return;}
+    const {data:adminData}=await sbClient.from('admin_config').select('*').eq('admin_user',u).eq('admin_pwd',p).single();
+    if(adminData){
+        document.getElementById("pageLogin").classList.add("hidden");
+        document.getElementById("pageAdmin").classList.remove("hidden");
+        await renderAdminList();
+        return;
+    }
+    const {data:clsList}=await sbClient.from('class_info').select('*');
+    let matchClass=null;
+    let role=null;
+    for(let c of clsList){
+        if(c.stu_login===u && c.stu_pwd===p){matchClass=c;role="student";break;}
+        if(c.tea_login===u && c.tea_pwd===p){matchClass=c;role="teacher";break;}
+    }
+    if(!matchClass){alert("用户名或者密码错误！");return;}
+    currentLoginInfo={role:role,classId:matchClass.id,className:matchClass.class_name};
+    document.getElementById("pageLogin").classList.add("hidden");
+    if(role==="student"){
+        document.getElementById("pageStudent").classList.remove("hidden");
+        document.getElementById("stuClassTitle").innerText="班级："+matchClass.class_name;
+        await studentLoadData();
+    }else{
+        document.getElementById("pageTeacher").classList.remove("hidden");
+        document.getElementById("teaClassTitle").innerText="班级："+matchClass.class_name;
+        await teacherLoadData();
+    }
+}
+
+//====学生端逻辑：扫码标记上交====
+function toggleTopCollapse(){
+    topIsCollapsed=!topIsCollapsed;
+    const wrap=document.getElementById("topWrap");
+    const btn=document.getElementById("topTriBtn");
+    if(topIsCollapsed){wrap.classList.remove("expanded");wrap.classList.add("collapsed");btn.innerText="▲";}
+    else{wrap.classList.remove("collapsed");wrap.classList.add("expanded");btn.innerText="▼";}
+}
+function toggleUnsubmittedView(){
+    showOnlyUnsubmitted=!showOnlyUnsubmitted;
+    const btn=document.getElementById("unsubmitBtn");
+    if(showOnlyUnsubmitted){btn.classList.add("active");btn.innerText="显示全部";}
+    else{btn.classList.remove("active");btn.innerText="未上交展示";}
+    studentRenderDisplay();
+}
+async function handleScanGunKey(evt){
+    if(evt.key!=='Enter') return;
+    const inputDom=document.getElementById("scanGunInput");
+    const scanSid=inputDom.value.trim();
+    inputDom.value="";inputDom.focus();
+    if(!scanSid||!currentLoginInfo.classId) return;
+    const {data:stu}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId).eq("sid",scanSid).single();
+    if(!stu){alert(`没有找到条码编号：${scanSid}`);return;}
+    const {data:hwList}=await sbClient.from("homework").select("id").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false}).limit(1);
+    if(!hwList||hwList.length===0){alert("请老师先新建作业！");return;}
+    activeHwId=hwList[0].id;
+    const {data:sub}=await sbClient.from("hw_submit").select("id").eq("hw_id",activeHwId).eq("student_id",stu.id).single();
+    if(sub){
+        await sbClient.from("hw_submit").update({submit_status:"已提交",submit_at:new Date()}).eq("id",sub.id);
+    }else{
+        await sbClient.from("hw_submit").insert([{hw_id:activeHwId,student_id:stu.id,submit_status:"已提交"}]);
+    }
+    await studentLoadData();
+}
+async function studentLoadData(){
+    const {data:hwList}=await sbClient.from("homework").select("id,hw_name,create_at").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false});
+    if(hwList&&hwList.length>0) activeHwId=hwList[0].id;
+    const domHw=document.getElementById("stuHwList");
+    let hwHtml="";
+    if(!hwList||hwList.length===0){hwHtml="<p>暂无作业，请老师新建作业</p>";}else{
+        hwList.forEach(hw=>{
+            hwHtml+=`<button onclick="activeHwId=${hw.id};studentLoadData()">${hw.hw_name}</button>`;
+        })
+    }
+    domHw.innerHTML=hwHtml;
+    studentRenderDisplay();
+}
+async function studentRenderDisplay(){
+    const {data:stuAll}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId);
+    if(!stuAll||stuAll.length===0){
+        document.getElementById("displayArea").innerHTML="<p>暂无学生，请教师导入学生名单</p>";
+        document.getElementById("statBarStudent").innerHTML="";
+        return;
+    }
+    if(!activeHwId){
+        document.getElementById("displayArea").innerHTML="<p>请选择作业</p>";
+        return;
+    }
+    const {data:subAll}=await sbClient.from("hw_submit").select("*,class_student(sid,sname)").eq("hw_id",activeHwId);
+    let arr=stuAll.map(s=>{
+        const sub=subAll?subAll.find(x=>x.student_id===s.id):null;
+        return {
+            sid:s.sid,
+            sname:s.sname,
+            submit_status:sub?sub.submit_status:"未提交",
+            grade:sub?sub.grade:"未批改",
+            is_return:sub?sub.is_return:"否"
+        }
+    });
+    const total=arr.length;
+    const submitted=arr.filter(x=>x.submit_status==="已提交").length;
+    const unsub=arr.filter(x=>x.submit_status!=="已提交").length;
+    const g1=arr.filter(x=>x.grade==="优+").length;
+    const g2=arr.filter(x=>x.grade==="优").length;
+    const g3=arr.filter(x=>x.grade==="良").length;
+    const g4=arr.filter(x=>x.grade==="及格").length;
+    const g5=arr.filter(x=>x.grade==="待及格").length;
+    const statHtml=`
+    <div class="stat-row">
+        <div class="stat-box stat-gray"><div class="stat-num">${total}</div><div class="stat-label">总人数</div></div>
+        <div class="stat-box stat-green"><div class="stat-num">${submitted}</div><div class="stat-label">已交</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${unsub}</div><div class="stat-label">未交</div></div>
+    </div>
+    <div class="stat-row">
+        <div class="stat-box stat-green"><div class="stat-num">${g1}</div><div class="stat-label">优+</div></div>
+        <div class="stat-box stat-green"><div class="stat-num">${g2}</div><div class="stat-label">优</div></div>
+        <div class="stat-box stat-blue"><div class="stat-num">${g3}</div><div class="stat-label">良</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${g4}</div><div class="stat-label">及格</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${g5}</div><div class="stat-label">待及格</div></div>
+    </div>`;
+    document.getElementById("statBarStudent").innerHTML=statHtml;
+    if(showOnlyUnsubmitted) arr=arr.filter(r=>r.submit_status!=="已提交");
+    let tableHtml=`<table><tr><th>条码编号</th><th>姓名</th><th>上交状态</th><th>作业等级</th><th>是否退回</th></tr>`;
+    arr.forEach(r=>{
+        tableHtml+=`<tr><td>${r.sid}</td><td>${r.sname}</td><td>${r.submit_status}</td><td>${r.grade}</td><td>${r.is_return}</td></tr>`;
+    })
+    tableHtml+="</table>";
+    document.getElementById("displayArea").innerHTML=tableHtml;
+}
+
+//====教师端逻辑：扫码枪扫条码直接弹出批改弹窗====
+async function importTeacherStudent(){
+    const file=document.getElementById("teaImportStuFile").files[0];
+    if(!file) return;
+    const r=new FileReader();
+    r.onload=async ev=>{
+        const wb=XLSX.read(ev.target.result,{type:"binary"});
+        const sheet=wb.Sheets[wb.SheetNames[0]];
+        const json=XLSX.utils.sheet_to_json(sheet);
+        const insertArr=json.map(item=>{
+            return {class_id:currentLoginInfo.classId, sid:String(item.sid||item["学生条码编号"]||""), sname:String(item.name||item["学生姓名"]||"")};
+        });
+        await sbClient.from("class_student").insert(insertArr);
+        alert("学生名单导入完成！");
+        await teacherLoadData();
+    };
+    r.readAsBinaryString(file);
+}
+async function createNewHomework(){
+    const hwName=document.getElementById("newHwNameTea").value.trim();
+    if(!hwName){alert("填写作业名称");return;}
+    await sbClient.from("homework").insert([{class_id:currentLoginInfo.classId,hw_name:hwName}]);
+    document.getElementById("newHwNameTea").value="";
+    alert("作业创建成功！");
+    await teacherLoadData();
+}
+async function handleTeacherScan(evt){
+    if(evt.key!=='Enter') return;
+    const inputDom=document.getElementById("teacherScanInput");
+    const scanSid=inputDom.value.trim();
+    inputDom.value="";
+    inputDom.focus();
+    if(!scanSid||!currentLoginInfo.classId) return;
+    const {data:stu}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId).eq("sid",scanSid).single();
+    if(!stu){
+        alert(`没有找到条码编号：${scanSid}`);
+        return;
+    }
+    const {data:hwList}=await sbClient.from("homework").select("id").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false}).limit(1);
+    if(!hwList||hwList.length===0){
+        alert("请先新建作业！");
+        return;
+    }
+    activeHwId=hwList[0].id;
+    let {data:sub}=await sbClient.from("hw_submit").select("*").eq("hw_id",activeHwId).eq("student_id",stu.id).single();
+    if(!sub){
+        const insertRes=await sbClient.from("hw_submit").insert([{
+            hw_id:activeHwId,
+            student_id:stu.id,
+            submit_status:"未提交",
+            grade:"未批改",
+            is_return:"否"
+        }]).select();
+        sub=insertRes.data[0];
+    }
+    currentEditSubmitId=sub.id;
+    document.getElementById("editSid").innerText=stu.sid;
+    document.getElementById("editStuName").innerText=stu.sname;
+    document.getElementById("editSubmitStatus").innerText=sub.submit_status;
+    document.getElementById("editGrade").value=sub.grade;
+    document.getElementById("editReturn").checked=(sub.is_return==="是");
+    openModal("editModal");
+}
+function toggleFilterUncheck(){filterUnCheck=!filterUnCheck;teacherLoadData();}
+function printOverview(){window.print();}
+async function teacherLoadData(){
+    const {data:hwList}=await sbClient.from("homework").select("id,hw_name,create_at").eq("class_id",currentLoginInfo.classId).order("create_at",{ascending:false});
+    if(hwList&&hwList.length>0) activeHwId=hwList[0].id;
+    const {data:stuAll}=await sbClient.from("class_student").select("*").eq("class_id",currentLoginInfo.classId);
+    if(!stuAll||stuAll.length===0){
+        document.getElementById("teacherOverview").innerHTML="<p>暂无学生，请导入学生名单</p>";
+        document.getElementById("statBarTeacher").innerHTML="";
+        return;
+    }
+    if(!activeHwId){
+        document.getElementById("teacherOverview").innerHTML="<p>请新建作业</p>";
+        return;
+    }
+    const {data:subAll}=await sbClient.from("hw_submit").select("*,class_student(sid,sname)").eq("hw_id",activeHwId);
+    let arr=stuAll.map(s=>{
+        const sub=subAll?subAll.find(x=>x.student_id===s.id):null;
+        return {
+            subId:sub?sub.id:null,
+            sid:s.sid,
+            sname:s.sname,
+            submit_status:sub?sub.submit_status:"未提交",
+            grade:sub?sub.grade:"未批改",
+            is_return:sub?sub.is_return:"否"
+        }
+    });
+    const total=arr.length;
+    const submitted=arr.filter(x=>x.submit_status==="已提交").length;
+    const unsub=arr.filter(x=>x.submit_status!=="已提交").length;
+    const g1=arr.filter(x=>x.grade==="优+").length;
+    const g2=arr.filter(x=>x.grade==="优").length;
+    const g3=arr.filter(x=>x.grade==="良").length;
+    const g4=arr.filter(x=>x.grade==="及格").length;
+    const g5=arr.filter(x=>x.grade==="待及格").length;
+    const statHtml=`
+    <div class="stat-row">
+        <div class="stat-box stat-gray"><div class="stat-num">${total}</div><div class="stat-label">总人数</div></div>
+        <div class="stat-box stat-green"><div class="stat-num">${submitted}</div><div class="stat-label">已交</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${unsub}</div><div class="stat-label">未交</div></div>
+    </div>
+    <div class="stat-row">
+        <div class="stat-box stat-green"><div class="stat-num">${g1}</div><div class="stat-label">优+</div></div>
+        <div class="stat-box stat-green"><div class="stat-num">${g2}</div><div class="stat-label">优</div></div>
+        <div class="stat-box stat-blue"><div class="stat-num">${g3}</div><div class="stat-label">良</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${g4}</div><div class="stat-label">及格</div></div>
+        <div class="stat-box stat-red"><div class="stat-num">${g5}</div><div class="stat-label">待及格</div></div>
+    </div>`;
+    document.getElementById("statBarTeacher").innerHTML=statHtml;
+    if(filterUnCheck) arr=arr.filter(r=>r.grade==="未批改");
+    let tableHtml=`<table><tr><th>条码编号</th><th>姓名</th><th>上交状态</th><th>作业等级</th><th>是否退回</th><th>操作</th></tr>`;
+    arr.forEach(r=>{
+        tableHtml+=`<tr>
+        <td>${r.sid}</td>
+        <td>${r.sname}</td>
+        <td>${r.submit_status}</td>
+        <td>${r.grade}</td>
+        <td>${r.is_return}</td>
+        <td><button onclick="openTeaEdit('${r.subId}','${r.sid}','${r.sname}','${r.submit_status}','${r.grade}','${r.is_return}')">批改</button></td>
+        </tr>`;
+    })
+    tableHtml+="</table>";
+    document.getElementById("teacherOverview").innerHTML=tableHtml;
+}
+function openTeaEdit(subId,sid,sname,submitStatus,grade,isReturn){
+    currentEditSubmitId=subId;
+    document.getElementById("editSid").innerText=sid;
+    document.getElementById("editStuName").innerText=sname;
+    document.getElementById("editSubmitStatus").innerText=submitStatus;
+    document.getElementById("editGrade").value=grade;
+    document.getElementById("editReturn").checked=(isReturn==="是");
+    openModal("editModal");
+}
+async function saveHwEdit(){
+    if(!currentEditSubmitId){alert("无记录");return;}
+    const gr=document.getElementById("editGrade").value;
+    const ret=document.getElementById("editReturn").checked?"是":"否";
+    await sbClient.from("hw_submit").update({grade:gr,is_return:ret}).eq("id",currentEditSubmitId);
+    closeModal("editModal");
+    await teacherLoadData();
+}
+
+//页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', async function(){
+  await initSupabase();
+});
+</script>
+</body>
+</html>
